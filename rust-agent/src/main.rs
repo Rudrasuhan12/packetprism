@@ -2,34 +2,53 @@ use pcap::{Capture, Device};
 use etherparse::SlicedPacket;
 
 fn main() {
-    println!("PacketPrism :: Day 2A - Capture Loop with Safe Slicing\n");
+    println!("PacketPrism :: Day 2 - Final Capture Loop (Read-Only)\n");
 
-    // 1. Automatically select default device (non-loopback)
-    let device = Device::list()
-        .expect("Failed to list devices")
+    // 1. List devices
+    let devices = Device::list().expect("Failed to list devices");
+
+    // 2. Select default active device (non-loopback, non-WAN)
+    let device = devices
         .into_iter()
-        .find(|d| !d.name.contains("Loopback") && !d.name.contains("loopback"))
-        .expect("No suitable default device found");
+        .find(|d| {
+            !d.name.contains("Loopback")
+                && d.desc.as_deref().is_some()
+                && !d.desc.as_deref().unwrap().contains("WAN Miniport")
+        })
+        .expect("No suitable active device found");
 
     println!("Using default interface: {}\n", device.name);
 
-    // 2. Open capture in promiscuous mode
-    let mut capture = Capture::from_device(device)
+    // 3. Open capture
+    let mut cap = Capture::from_device(device)
         .expect("Failed to create capture")
         .promisc(true)
         .snaplen(65535)
-        .timeout(1000)
+        .timeout(1000) // timeout is fine — we handle it
         .open()
         .expect("Failed to open capture");
 
-    println!("Capturing packets (safe slicing enabled)...\n");
+    println!("Capturing packets with safe slicing...\n");
 
-    // 3. Capture loop (read-only)
-    while let Ok(packet) = capture.next_packet() {
-        // 4. Safe slice using etherparse (no extraction yet)
-        let _ = SlicedPacket::from_ethernet(packet.data);
+    // 4. Continuous capture loop (CORRECT)
+    loop {
+        match cap.next_packet() {
+            Ok(packet) => {
+                let data = packet.data;
 
-        // 5. Print packet size only
-        println!("Captured packet: {} bytes", packet.header.len);
+                // Safe slicing
+                let _ = SlicedPacket::from_ethernet(data);
+
+                println!("Captured packet: {} bytes", data.len());
+            }
+            Err(pcap::Error::TimeoutExpired) => {
+                // No packet in this interval — keep running
+                continue;
+            }
+            Err(e) => {
+                eprintln!("Capture error: {:?}", e);
+                break;
+            }
+        }
     }
 }
