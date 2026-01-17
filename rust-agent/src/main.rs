@@ -1,32 +1,32 @@
-use pcap::Device;
+use pcap::{Capture, Device};
 
 fn main() {
-    println!("PacketPrism :: Day 1 - Interface Visibility Check\n");
+    println!("PacketPrism :: Day 2 - Packet Capture (Read-Only)\n");
 
-    match Device::list() {
-        Ok(devices) => {
-            if devices.is_empty() {
-                println!("No network interfaces found.");
-                return;
-            }
+    // Get all available devices
+    let devices = Device::list().expect("Failed to list network devices");
 
-            println!("Available Network Interfaces:");
-            for (index, device) in devices.iter().enumerate() {
-                let desc = device
-                    .desc
-                    .as_deref()
-                    .unwrap_or("No description available");
+    // Select the Wi-Fi interface using the FULL device ID
+    let device = devices
+        .into_iter()
+        .find(|d| d.name == r"\Device\NPF_{A26049B8-3D36-4830-A9DE-A4AC8C8755DD}")
+        .expect("Selected Wi-Fi device not found");
 
-                println!(
-                    "{}. Name: {:<40} | Description: {}",
-                    index + 1,
-                    device.name,
-                    desc
-                );
-            }
-        }
-        Err(err) => {
-            eprintln!("Failed to list network interfaces: {}", err);
-        }
+    println!("Using interface: {}\n", device.name);
+
+    // Open capture in promiscuous mode
+    let mut cap = Capture::from_device(device)
+        .expect("Failed to create capture from device")
+        .promisc(true)
+        .snaplen(65535)
+        .timeout(1000)
+        .open()
+        .expect("Failed to open capture");
+
+    println!("Capturing packets... (Press Ctrl+C to stop)\n");
+
+    // Infinite read-only capture loop
+    while let Ok(packet) = cap.next_packet() {
+        println!("Packet captured: {} bytes", packet.header.len);
     }
 }
