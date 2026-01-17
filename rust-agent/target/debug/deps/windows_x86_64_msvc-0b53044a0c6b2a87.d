@@ -1,0 +1,7 @@
+C:\Users\rudra\packetprism\rust-agent\target\debug\deps\windows_x86_64_msvc-0b53044a0c6b2a87.d: C:\Users\rudra\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\windows_x86_64_msvc-0.36.1\src\lib.rs
+
+C:\Users\rudra\packetprism\rust-agent\target\debug\deps\libwindows_x86_64_msvc-0b53044a0c6b2a87.rlib: C:\Users\rudra\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\windows_x86_64_msvc-0.36.1\src\lib.rs
+
+C:\Users\rudra\packetprism\rust-agent\target\debug\deps\libwindows_x86_64_msvc-0b53044a0c6b2a87.rmeta: C:\Users\rudra\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\windows_x86_64_msvc-0.36.1\src\lib.rs
+
+C:\Users\rudra\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\windows_x86_64_msvc-0.36.1\src\lib.rs:
