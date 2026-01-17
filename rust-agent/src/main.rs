@@ -1,32 +1,35 @@
 use pcap::{Capture, Device};
+use etherparse::SlicedPacket;
 
 fn main() {
-    println!("PacketPrism :: Day 2 - Packet Capture (Read-Only)\n");
+    println!("PacketPrism :: Day 2A - Capture Loop with Safe Slicing\n");
 
-    // Get all available devices
-    let devices = Device::list().expect("Failed to list network devices");
-
-    // Select the Wi-Fi interface using the FULL device ID
-    let device = devices
+    // 1. Automatically select default device (non-loopback)
+    let device = Device::list()
+        .expect("Failed to list devices")
         .into_iter()
-        .find(|d| d.name == r"\Device\NPF_{A26049B8-3D36-4830-A9DE-A4AC8C8755DD}")
-        .expect("Selected Wi-Fi device not found");
+        .find(|d| !d.name.contains("Loopback") && !d.name.contains("loopback"))
+        .expect("No suitable default device found");
 
-    println!("Using interface: {}\n", device.name);
+    println!("Using default interface: {}\n", device.name);
 
-    // Open capture in promiscuous mode
-    let mut cap = Capture::from_device(device)
-        .expect("Failed to create capture from device")
+    // 2. Open capture in promiscuous mode
+    let mut capture = Capture::from_device(device)
+        .expect("Failed to create capture")
         .promisc(true)
         .snaplen(65535)
         .timeout(1000)
         .open()
         .expect("Failed to open capture");
 
-    println!("Capturing packets... (Press Ctrl+C to stop)\n");
+    println!("Capturing packets (safe slicing enabled)...\n");
 
-    // Infinite read-only capture loop
-    while let Ok(packet) = cap.next_packet() {
-        println!("Packet captured: {} bytes", packet.header.len);
+    // 3. Capture loop (read-only)
+    while let Ok(packet) = capture.next_packet() {
+        // 4. Safe slice using etherparse (no extraction yet)
+        let _ = SlicedPacket::from_ethernet(packet.data);
+
+        // 5. Print packet size only
+        println!("Captured packet: {} bytes", packet.header.len);
     }
 }
