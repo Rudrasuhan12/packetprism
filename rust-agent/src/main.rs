@@ -2,8 +2,9 @@ use pcap::{Capture, Device};
 use etherparse::SlicedPacket;
 use serde::Serialize;
 use chrono::Utc;
+use redis::{Commands, Connection};
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize)]
 struct PacketLog {
     src_ip: String,
     dst_ip: String,
@@ -12,25 +13,43 @@ struct PacketLog {
     timestamp: String,
 }
 
+// ---- Redis connection helper ----
+fn connect_redis() -> Option<Connection> {
+    match redis::Client::open("redis://127.0.0.1:6379") {
+        Ok(client) => match client.get_connection() {
+            Ok(con) => {
+                println!("Connected to Redis");
+                Some(con)
+            }
+            Err(e) => {
+                eprintln!("Redis connection error: {:?}", e);
+                None
+            }
+        },
+        Err(e) => {
+            eprintln!("Redis client error: {:?}", e);
+            None
+        }
+    }
+}
+
 fn main() {
-    println!("PacketPrism :: Day 3 - Packet Contract Serialization\n");
+    println!("PacketPrism :: Day 4 - Redis Transport Layer\n");
 
-    // 1. List devices
-    let devices = Device::list().expect("Failed to list devices");
-
-    // 2. Select default active device (non-loopback, non-WAN)
-    let device = devices
+    // 1. Device selection
+    let device = Device::list()
+        .expect("Failed to list devices")
         .into_iter()
         .find(|d| {
             !d.name.contains("Loopback")
                 && d.desc.as_deref().is_some()
                 && !d.desc.as_deref().unwrap().contains("WAN Miniport")
         })
-        .expect("No suitable active device found");
+        .expect("No suitable device found");
 
-    println!("Using default interface: {}\n", device.name);
+    println!("Using interface: {}\n", device.name);
 
-    // 3. Open capture
+    // 2. Open capture
     let mut cap = Capture::from_device(device)
         .expect("Failed to create capture")
         .promisc(true)
@@ -39,7 +58,10 @@ fn main() {
         .open()
         .expect("Failed to open capture");
 
-    println!("Capturing packets and serializing to JSON...\n");
+    // 3. Redis connection (outside loop)
+    let mut redis_con = connect_redis();
+
+    println!("Publishing packets to Redis channel: packet_stream\n");
 
     // 4. Continuous capture loop
     loop {
@@ -47,10 +69,9 @@ fn main() {
             Ok(packet) => {
                 let data = packet.data;
 
-                // 5. Safe slicing (no field extraction yet)
+                // Safe slicing (no extraction yet — Day 5)
                 let _ = SlicedPacket::from_ethernet(data);
 
-                // 6. Create PacketLog (mocked IPs & protocol for Day 3)
                 let log = PacketLog {
                     src_ip: "0.0.0.0".to_string(),
                     dst_ip: "0.0.0.0".to_string(),
@@ -59,16 +80,28 @@ fn main() {
                     timestamp: Utc::now().to_rfc3339(),
                 };
 
-                // 7. Serialize to JSON
-                let json = serde_json::to_string(&log)
-                    .expect("Failed to serialize PacketLog");
+                // Serialize + publish
+                if let Ok(json) = serde_json::to_string(&log) {
+                    if let Some(con) = redis_con.as_mut() {
+                        let publish_result: redis::RedisResult<()> =
+                            con.publish("packet_stream", json);
 
-                println!("{}", json);
+                        if publish_result.is_err() {
+                            eprintln!("Redis publish failed. Retrying connection...");
+                            redis_con = connect_redis();
+                        }
+                    } else {
+                        // Redis was unavailable earlier, retry connection
+                        redis_con = connect_redis();
+                    }
+                }
             }
+
             Err(pcap::Error::TimeoutExpired) => {
-                // No packets in this interval — keep running
+                // No packet in this window, keep running
                 continue;
             }
+
             Err(e) => {
                 eprintln!("Capture error: {:?}", e);
                 break;
